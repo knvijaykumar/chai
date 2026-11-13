@@ -27,6 +27,9 @@ def process(
     audit_db: str | None = None,
     detector=None,
     validate_ids: bool = True,
+    source_images: list[dict] | None = None,
+    page_spans: list[dict] | None = None,
+    original_doc_bytes: bytes | None = None,
 ) -> ProcessResult:
     """`detector` replaces detect() for tests and failure drills only.
 
@@ -41,10 +44,15 @@ def process(
     invalid: list[dict] = []
     if validate_ids:
         entities, invalid = check_ids(text, entities)
+    if page_spans:
+        from .document import assign_entity_pages
+        entities = assign_entity_pages(entities, page_spans)
     masked = mask(text, entities)
     prompt = build_prompt(masked.masked_text, task)
     leak = check_outbound(prompt, masked.mapping)
     pre_ms = (time.perf_counter() - t0) * 1000
+
+    source_imgs = source_images or []
 
     if invalid:
         # Ask the user to correct the IDs; never forward a request built on bad input.
@@ -64,6 +72,8 @@ def process(
             llm_ms=0.0,
             needs_correction=True,
             invalid_ids=invalid,
+            source_images=source_imgs,
+            original_doc_bytes=original_doc_bytes,
         )
     elif not leak.passed:
         # Never forward a payload that still holds a raw value.
@@ -82,6 +92,8 @@ def process(
             gateway_ms=pre_ms,
             llm_ms=0.0,
             blocked=True,
+            source_images=source_imgs,
+            original_doc_bytes=original_doc_bytes,
         )
     else:
         try:
@@ -110,10 +122,33 @@ def process(
             model=resp.model,
             gateway_ms=pre_ms + post_ms,
             llm_ms=resp.latency_ms,
+            source_images=source_imgs,
+            original_doc_bytes=original_doc_bytes,
         )
 
     if audit:
         from .audit import log_request
 
         log_request(result, audit_db)
+
+    # Final PDF Report Generation - generated ONLY after the entire workflow completes
+    from .reports import generate_and_store_reports, is_workflow_successful
+    from .risk import assess_document_risk
+
+    if is_workflow_successful(result):
+        generate_and_store_reports(result, source_images=source_imgs, original_doc_bytes=original_doc_bytes)
+        risk_summary = assess_document_risk(result)
+        result.reports = {
+            "internal_url": f"/reports/internal/{result.request_id}",
+            "risk_score": risk_summary.overall_risk_score,
+            "risk_level": risk_summary.overall_risk_level,
+            "available": True,
+        }
+    else:
+        generate_and_store_reports(result, source_images=source_imgs, original_doc_bytes=original_doc_bytes)
+        result.reports = {
+            "available": False,
+            "reason": "Request blocked or validation failed",
+        }
+
     return result

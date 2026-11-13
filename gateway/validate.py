@@ -131,12 +131,12 @@ def problem(etype: str, value: str) -> str | None:
 # ---- values written after a keyword, even if malformed ---------------------
 _SEP = r"(?:\s*(?:card|no\.?|number|num|ref\.?|id|#|is|hai|:|-)\s*){0,4}[:#.\-]?\s*"
 _CLAIM = {
-    "AADHAAR": (r"\b(?:aadhaar|aadhar|adhaar|adhar|uidai|uid)\b", r"[0-9][0-9 \-]{4,22}[0-9]"),
-    "PAN": (r"\bpan\b", r"[A-Za-z0-9]{6,14}"),
+    "AADHAAR": (r"\b(?:aadhaar|aadhar|adhaar|adhar|uidai|uid|vid)\b", r"[0-9][0-9 \-.:]{4,22}[0-9]"),
+    "PAN": (r"\b(?:pan|permanent\s+account\s+number)\b", r"[A-Za-z0-9]{6,14}"),
     "GSTIN": (r"\b(?:gstin|gst)\b", r"[A-Za-z0-9]{10,20}"),
-    "PASSPORT": (r"\bpassport\b", r"[A-Za-z0-9]{5,12}"),
-    "VOTER_ID": (r"\b(?:voter\s*id|voter|epic|elector\s*id)\b", r"[A-Za-z0-9]{6,14}"),
-    "PHONE": (r"\b(?:mobile|phone|mob|contact|whatsapp|ph)\b", r"\+?[0-9][0-9 ()\-]{5,18}[0-9]"),
+    "PASSPORT": (r"\b(?:passport|travel\s+doc(?:ument)?|ovd)\b", r"[A-Za-z0-9]{5,12}"),
+    "VOTER_ID": (r"\b(?:voter\s*id|voter|epic|elector\s*id|pehchan)\b", r"[A-Za-z0-9]{6,14}"),
+    "PHONE": (r"\b(?:mobile|phone|mob|contact|whatsapp|ph|cell|tel|telephone)\b", r"\+?[0-9][0-9 ()\-]{5,18}[0-9]"),
 }
 _CLAIM_RE = {t: re.compile(kw + _SEP + r"(?P<v>" + val + r")", re.IGNORECASE) for t, (kw, val) in _CLAIM.items()}
 

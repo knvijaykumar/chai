@@ -65,7 +65,15 @@ select{padding:8px 10px;border-radius:8px;border:1px solid var(--line);backgroun
 .banner.warn{display:block;background:var(--warn-soft);color:var(--warn)}
 .banner.bad{display:block;background:var(--bad-soft);color:var(--bad)}
 .banner small{display:block;font-weight:500;opacity:.9;margin-top:2px}
-.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;align-items:stretch}
+.three .card{display:flex;flex-direction:column;height:450px;max-height:450px;padding:0;overflow:hidden;min-width:0;position:relative}
+.three .card h2{position:sticky;top:0;z-index:2;flex-shrink:0;background:var(--surface);margin:0;padding:14px 16px 12px;border-bottom:1px solid var(--line);font:700 .78rem var(--f-m);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.three .card .text{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;min-height:0;padding:14px 16px;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;line-height:1.85;font-size:.92rem;scrollbar-width:thin;scrollbar-color:var(--line) transparent}
+.three .card .text::-webkit-scrollbar{width:6px;height:6px}
+.three .card .text::-webkit-scrollbar-track{background:transparent}
+.three .card .text::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.three .card .text::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+@media(max-width:900px){.three{grid-template-columns:1fr!important;gap:16px}.three .card{height:420px;max-height:420px}}
 .text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.9;font-size:.95rem}
 .hl{padding:1px 3px;border-radius:4px}
 .hl i{font:600 .6rem var(--f-m);font-style:normal;opacity:.75;margin-left:3px;vertical-align:1px}
@@ -110,9 +118,38 @@ td.m{font-family:var(--f-m);font-size:.8rem}
 <main id="tab-run">
   <div class="input-grid">
     <div class="card">
-      <h2>1 · Customer document</h2>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2>1 · Customer document</h2>
+        <span class="sub" style="font-size:0.75rem">Manual text or PDF/Image upload</span>
+      </div>
+
+      <!-- Upload Document Component -->
+      <div id="dropzone" style="border:2px dashed var(--line);border-radius:10px;padding:10px 14px;background:var(--bg);margin-bottom:10px;transition:all 0.2s ease">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="file" id="file-input" accept=".pdf,.png,.jpg,.jpeg" style="display:none">
+            <button type="button" class="btn ghost" id="btn-upload" style="display:inline-flex;align-items:center;gap:6px;font-weight:600">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              Upload Document
+            </button>
+            <span class="sub" style="font-size:0.78rem">or drag &amp; drop PDF, PNG, JPG (max 10 MB, 20 pages)</span>
+          </div>
+          <div id="file-pill" style="display:none;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 10px;font-size:0.8rem">
+            <span style="font-weight:600" id="file-name"></span>
+            <span class="sub" id="file-size" style="font-family:var(--f-m)"></span>
+            <span class="pill" id="file-method" style="font-size:0.7rem;padding:2px 6px"></span>
+            <button type="button" id="btn-remove-file" title="Remove selected file" style="background:none;border:none;color:var(--bad);cursor:pointer;font-weight:bold;font-size:1.1rem;line-height:1;padding:0 2px">&times;</button>
+          </div>
+        </div>
+        <div id="upload-status" style="display:none;margin-top:8px;font-size:0.8rem;color:var(--accent);align-items:center;gap:8px">
+          <span class="pill idle" style="font-size:0.72rem">Processing</span>
+          <span id="upload-msg">Extracting text locally from document...</span>
+        </div>
+        <div id="upload-error" style="display:none;margin-top:8px;font-size:0.8rem;color:var(--bad);background:var(--bad-soft);border-radius:6px;padding:6px 10px"></div>
+      </div>
+
       <div class="row" style="margin-bottom:10px" id="samples"></div>
-      <textarea id="text" aria-label="Document text"></textarea>
+      <textarea id="text" aria-label="Document text" placeholder="Type or paste document text here, or upload a PDF/Image above..."></textarea>
     </div>
     <div class="card opts">
       <h2>2 · Settings</h2>
@@ -140,6 +177,7 @@ td.m{font-family:var(--f-m);font-size:.8rem}
     <div class="step boundary" data-s="4"><b>Send to AI</b><span>Only masked text leaves</span></div>
     <div class="step" data-s="5"><b>Reinsert</b><span>Restore real values</span></div>
     <div class="step" data-s="6"><b>Audit</b><span>Log, no raw values</span></div>
+    <div class="step" data-s="7"><b>Final Report</b><span>Internal Risk Assessment</span></div>
   </div>
 
   <div class="banner" id="banner"></div>
@@ -148,6 +186,20 @@ td.m{font-family:var(--f-m);font-size:.8rem}
     <div class="card"><h2>Detected on the laptop</h2><div class="text" id="detected"><span class="empty">Run the gateway to see detected personal data.</span></div></div>
     <div class="card" style="border-color:var(--accent)"><h2>Exactly what the AI receives</h2><div class="text" id="sent"><span class="empty">Masked text appears here.</span></div></div>
     <div class="card"><h2>Final answer for the user</h2><div class="text" id="final"><span class="empty">Restored answer appears here.</span></div></div>
+  </div>
+
+  <div class="card" id="reports-card" style="display:none;margin-top:14px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+      <div>
+        <h2 style="margin:0;font-size:1.05rem">Final PDF Report</h2>
+        <p class="sub" style="margin:4px 0 0;font-size:0.8rem">Download confidential employee privacy audit report (generated as the final workflow step).</p>
+      </div>
+      <div>
+        <a id="btn-report-internal" class="btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;font-size:0.82rem;padding:8px 16px;background:#0284c7" href="#" target="_blank">
+          📄 Download Internal Risk Assessment (PDF)
+        </a>
+      </div>
+    </div>
   </div>
 
   <div class="two">
@@ -188,7 +240,11 @@ const PH = /&lt;([A-Z_]+?)_(\d+)&gt;/g;
 
 for (const k of Object.keys(SAMPLES)) {
   const b = document.createElement("button"); b.className = "btn ghost"; b.textContent = k;
-  b.onclick = () => { $("text").value = SAMPLES[k]; }; $("samples").appendChild(b);
+  b.onclick = () => {
+    $("text").value = SAMPLES[k];
+    clearFilePill();
+  };
+  $("samples").appendChild(b);
 }
 $("text").value = SAMPLES["Hinglish"];
 
@@ -254,6 +310,14 @@ function render(r) {
   const max = Math.max(r.gateway_ms, r.llm_ms, 1);
   $("timing").innerHTML = `<div>Gateway (detect + mask + guard + reinsert): <b>${r.gateway_ms.toFixed(0)} ms</b><div class="tbar" style="width:${Math.max(2, 100 * r.gateway_ms / max)}%"></div></div>
     <div>AI call (${esc(r.model)}): <b>${r.llm_ms >= 1000 ? (r.llm_ms / 1000).toFixed(1) + " s" : r.llm_ms.toFixed(1) + " ms"}</b><div class="tbar llm" style="width:${Math.max(2, 100 * r.llm_ms / max)}%"></div></div>`;
+
+  const rc = $("reports-card");
+  if (r.reports && r.reports.available && !r.blocked && !r.needs_correction) {
+    rc.style.display = "block";
+    $("btn-report-internal").href = r.reports.internal_url;
+  } else {
+    rc.style.display = "none";
+  }
 }
 
 $("run").onclick = async () => {
@@ -267,7 +331,7 @@ $("run").onclick = async () => {
     clearInterval(tick);
     const r = await res.json();
     if (!res.ok) {
-      setSteps(["done", "done", "done", "done", "fail", "skip", "done"]);
+      setSteps(["done", "done", "done", "done", "fail", "skip", "skip", "skip"]);
       banner("bad", "The AI could not be reached (" + (r.detail || res.status).toString().replace("LLM call failed: ", "") + ").",
         "Your data was not exposed: only masked text had been prepared, and it passed the leak guard. The failure is recorded in the audit log.");
       return;
@@ -275,22 +339,22 @@ $("run").onclick = async () => {
     render(r);
     const n = r.entities.length;
     if (r.needs_correction) {
-      setSteps(["done", "fail", "skip", "skip", "skip", "skip", "done"]);
+      setSteps(["done", "fail", "skip", "skip", "skip", "skip", "skip", "skip"]);
       const b = $("banner"); b.className = "banner bad";
       b.innerHTML = `Please re-enter ${r.invalid_ids.length === 1 ? "this value" : "these " + r.invalid_ids.length + " values"}. Nothing was sent to the AI.`
         + `<ul class="fixlist">${r.invalid_ids.map(v => `<li>${esc(v.message)}</li>`).join("")}</ul>`;
     } else if (r.blocked) {
-      setSteps(["done", "done", "done", "fail", "skip", "skip", "done"]);
+      setSteps(["done", "done", "done", "fail", "skip", "skip", "skip", "skip"]);
       banner("bad", "Request blocked. A real " + r.leak_check.leaked_types.join(", ") + " value was still in the outgoing text.",
         "Nothing was sent to the AI. Only the type is reported, never the value. Recorded in the audit log as 'blocked'.");
     } else if (r.status === "flagged") {
-      setSteps(["done", "done", "done", "done", "done", "done", "done"]);
+      setSteps(["done", "done", "done", "done", "done", "done", "done", "done"]);
       const parts = [];
       if (r.reinsertion.dropped.length) parts.push("The AI left out " + r.reinsertion.dropped.join(", ") + ", so that value is missing from the answer.");
       if (r.reinsertion.unknown.length) parts.push("The AI invented " + r.reinsertion.unknown.join(", ") + ". It was left as-is and never filled with a guess.");
       banner("warn", "Answer delivered, with warnings.", parts.join(" "));
     } else {
-      setSteps(["done", "done", "done", "done", "done", "done", "done"]);
+      setSteps(["done", "done", "done", "done", "done", "done", "done", "done"]);
       banner("ok", n ? `${n} personal values masked. 0 leaks. All placeholders restored.` : "No personal data found. The text was sent as is.",
         "Leak check passed on the exact text sent to " + r.model + ".");
     }
@@ -298,6 +362,111 @@ $("run").onclick = async () => {
     clearInterval(tick); setSteps(["fail"]); banner("bad", "Could not reach the gateway server.", String(e));
   } finally { $("run").disabled = false; $("run").textContent = "Run gateway"; }
 };
+
+/* Document Upload & Drag-and-Drop Handler */
+const dropzone = $("dropzone");
+const fileInput = $("file-input");
+const btnUpload = $("btn-upload");
+const filePill = $("file-pill");
+const fileName = $("file-name");
+const fileSize = $("file-size");
+const fileMethod = $("file-method");
+const btnRemoveFile = $("btn-remove-file");
+const uploadStatus = $("upload-status");
+const uploadMsg = $("upload-msg");
+const uploadError = $("upload-error");
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+}
+
+function clearFilePill() {
+  fileInput.value = "";
+  filePill.style.display = "none";
+  uploadError.style.display = "none";
+  uploadStatus.style.display = "none";
+}
+
+btnUpload.onclick = () => fileInput.click();
+
+fileInput.onchange = () => {
+  if (fileInput.files && fileInput.files[0]) {
+    handleFileUpload(fileInput.files[0]);
+  }
+};
+
+dropzone.ondragover = e => {
+  e.preventDefault();
+  dropzone.style.borderColor = "var(--accent)";
+  dropzone.style.background = "var(--accent-soft)";
+};
+dropzone.ondragleave = e => {
+  e.preventDefault();
+  dropzone.style.borderColor = "var(--line)";
+  dropzone.style.background = "var(--bg)";
+};
+dropzone.ondrop = e => {
+  e.preventDefault();
+  dropzone.style.borderColor = "var(--line)";
+  dropzone.style.background = "var(--bg)";
+  if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
+    handleFileUpload(e.dataTransfer.files[0]);
+  }
+};
+
+btnRemoveFile.onclick = () => {
+  clearFilePill();
+};
+
+async function handleFileUpload(file) {
+  uploadError.style.display = "none";
+  uploadStatus.style.display = "flex";
+  uploadMsg.textContent = `Extracting text locally from ${file.name} (${formatBytes(file.size)})...`;
+  btnUpload.disabled = true;
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const res = await fetch("/extract-document", {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      uploadError.textContent = data.detail || "Upload failed. Please check the file format.";
+      uploadError.style.display = "block";
+      uploadStatus.style.display = "none";
+      return;
+    }
+
+    fileName.textContent = data.filename;
+    fileSize.textContent = formatBytes(file.size);
+    const methodNames = {
+      "pymupdf_text": "PyMuPDF Native",
+      "tesseract_ocr": "Tesseract OCR",
+      "hybrid": "Native + OCR"
+    };
+    fileMethod.textContent = (methodNames[data.extraction_method] || data.extraction_method)
+      + (data.page_count > 1 ? ` · ${data.page_count} pages` : "");
+    filePill.style.display = "inline-flex";
+
+    // Inject extracted text into Customer Document textarea for review & edit
+    $("text").value = data.text;
+    uploadStatus.style.display = "none";
+
+    banner("ok", `Document "${data.filename}" extracted locally (${data.character_count} chars).`,
+      "Review or edit the extracted text in the box below, then click 'Run gateway' to sanitize and process.");
+  } catch (err) {
+    uploadError.textContent = "Network error while uploading: " + String(err);
+    uploadError.style.display = "block";
+    uploadStatus.style.display = "none";
+  } finally {
+    btnUpload.disabled = false;
+  }
+}
 
 async function loadAudit() {
   const [s, rows] = await Promise.all([fetch("/audit/summary").then(r => r.json()), fetch("/audit?limit=50").then(r => r.json())]);

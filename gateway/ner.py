@@ -25,14 +25,15 @@ from .contracts import Entity
 
 GLINER_MODEL = "urchade/gliner_multi_pii-v1"
 GLINER_LABELS = {"person": "PERSON", "address": "ADDRESS"}
-GLINER_THRESHOLD = 0.5
+GLINER_THRESHOLD = 0.45
 WINDOW_WORDS = 200   # GLiNER sees at most ~384 tokens; stay well under
 OVERLAP_WORDS = 30   # so a name on a window edge is still seen whole once
 
 ADDRESS_KEYWORDS = (
     r"Nagar|Road|Rd|Marg|Sector|Colony|Street|St|Lane|Chowk|Layout|Enclave|Vihar|Bagh|"
     r"Puram|Gali|Society|Apartments?|Apts?|Residency|Complex|Phase|Block|Mohalla|Basti|"
-    r"Gaon|Village|Taluka|Tehsil|District|Dist|Cross|Main"
+    r"Gaon|Village|Taluka|Tehsil|District|Dist|Cross|Main|Salai|Rasta|Gallu|Bazaar|Bazar|"
+    r"Market|Nivas|Niwas|Bhavan|Bhawan|Tower|Towers|Hills|Lakeview|Park|Heights|Villa|Gardens|Estate"
 )
 _ADDRESS_RE = re.compile(
     r"(?:\b(?:Flat|House|H\.?\s?No\.?|Plot|Door|Shop)\s*[\w/-]+,?\s*)?"
@@ -46,7 +47,7 @@ _PIN_RE = re.compile(r"\b[1-9][0-9]{2}\s?[0-9]{3}\b")
 
 # Premises word + number, 1-8 comma-separated parts, then a 6-digit PIN.
 _PREMISES = (r"House|H\.?\s?No|Flat|Plot|Unit|Door|Shop|Block|Bldg|Building|Apt|Apartment|"
-             r"Room|Office|Survey|Khasra|Ward|Quarters?|Qtr|Villa|Bungalow|Wing")
+             r"Room|Office|Survey|Khasra|Ward|Quarters?|Qtr|Villa|Bungalow|Wing|Site|Premises|Floor|Tower")
 POSTAL_ADDRESS_RE = re.compile(
     r"\b(?:" + _PREMISES + r")\.?(?:\s*No\.?)?\s*#?[A-Za-z0-9][A-Za-z0-9/-]*"
     r"(?:,\s*[^,\n]{2,60}?){1,8}?"
@@ -54,22 +55,43 @@ POSTAL_ADDRESS_RE = re.compile(
     re.IGNORECASE,
 )
 
+_NON_PERSON_PHRASES = {
+    "govt of india", "government of india", "income tax department", "tax department",
+    "election commission of india", "election commission", "republic of india",
+    "unique identification authority of india", "uidai", "state government",
+    "central government", "customer support", "technical support", "help desk",
+    "helpdesk", "fathers name", "mothers name", "husbands name", "date of birth",
+    "authorized signatory", "signature of holder", "permanent account number",
+}
+
 _NOT_A_PERSON = {
     "hi", "hello", "dear", "team", "support", "technical", "customer", "care", "service",
     "sir", "madam", "maam", "manager", "officer", "desk", "department", "dept", "bank",
     "branch", "applicant", "nominee", "owner", "agent", "executive", "helpdesk", "admin",
     "user", "client", "regards", "thanks", "ji",
+    "aadhaar", "aadhar", "adhaar", "adhar", "pan", "gstin", "voter", "passport", "epic",
+    "uid", "uidai", "govt", "government", "india", "bharat", "sarkar", "state", "ministry",
+    "income", "tax", "commission", "election", "authority", "card", "cardholder", "signatory",
 }
 _NOT_AN_ADDRESS = {"address", "addresses", "residence", "office", "home", "permanent",
                    "current", "communication", "residential", "mailing", "delivery"}
 
 
 def _plausible(e: Entity) -> bool:
+    clean_text = re.sub(r"[^\w\s]", "", e.text.casefold()).strip()
+    if clean_text in _NON_PERSON_PHRASES:
+        return False
     words = re.findall(r"[^\W\d_]+", e.text.casefold())
     if not words:
         return False
     if e.type == "PERSON":
-        return not all(w in _NOT_A_PERSON for w in words)
+        if any(p in clean_text for p in _NON_PERSON_PHRASES):
+            return False
+        if all(w in _NOT_A_PERSON for w in words):
+            return False
+        if len(words) == 1 and (words[0] in _NOT_A_PERSON or len(words[0]) < 2):
+            return False
+        return True
     if e.type == "ADDRESS":
         return not all(w in _NOT_AN_ADDRESS for w in words) and len(e.text.strip()) >= 4
     return True
@@ -114,14 +136,41 @@ def _windows(text: str):
             break
 
 
+def _split_multiline_person(ent: Entity, text: str) -> list[Entity]:
+    if "\n" not in ent.text and "\r" not in ent.text:
+        return [ent]
+    res = []
+    lines = re.split(r"[\r\n]+", ent.text)
+    curr_offset = ent.start
+    for line in lines:
+        if not line.strip():
+            continue
+        idx = text.find(line, curr_offset)
+        if idx != -1:
+            start = idx
+            end = start + len(line)
+            trimmed = line.strip(" \t,;:-.")
+            if trimmed:
+                t_start = start + line.find(trimmed)
+                t_end = t_start + len(trimmed)
+                res.append(Entity(type="PERSON", start=t_start, end=t_end,
+                                  text=text[t_start:t_end], score=ent.score, source=ent.source))
+            curr_offset = end
+    return res
+
+
 def _detect_gliner(text: str) -> list[Entity]:
     model = _gliner()
     out = []
     for offset, chunk in _windows(text):
         for p in model.predict_entities(chunk, list(GLINER_LABELS), threshold=GLINER_THRESHOLD):
             s, e = offset + p["start"], offset + p["end"]
-            out.append(Entity(type=GLINER_LABELS[p["label"]], start=s, end=e,
-                              text=text[s:e], score=float(p["score"]), source="gliner"))
+            ent = Entity(type=GLINER_LABELS[p["label"]], start=s, end=e,
+                         text=text[s:e], score=float(p["score"]), source="gliner")
+            if ent.type == "PERSON" and ("\n" in ent.text or "\r" in ent.text):
+                out.extend(_split_multiline_person(ent, text))
+            else:
+                out.append(ent)
     return out
 
 

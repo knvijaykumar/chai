@@ -9,4 +9,9 @@ streamlit
 google-genai
 pytest
 httpx
+pymupdf
+pytesseract
+pillow
+opencv-python>=4.8.0
+python-multipart
 # models (not pip): python -m spacy download en_core_web_lg
