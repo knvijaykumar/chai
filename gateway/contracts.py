@@ -36,6 +36,7 @@ class Entity:
     text: str
     score: float = 1.0
     source: str = "regex"  # "presidio" | "gliner" | "regex" | "spacy"
+    page: int | None = None  # 1-indexed original document page number if available
 
 
 @dataclass
@@ -110,9 +111,19 @@ class ProcessResult:
     gateway_ms: float  # detect + mask + reinsert, excludes the LLM call
     llm_ms: float
     blocked: bool = False  # True when the leakage guard stopped the request
+    # True when an ID failed validation (wrong format / check digit); nothing
+    # was sent and the user must re-enter the values listed in invalid_ids.
+    needs_correction: bool = False
+    invalid_ids: list[dict] = field(default_factory=list)  # {type, value, start, end, reason, message}
+    reports: dict = field(default_factory=dict)  # final report generation metadata & URLs
+    source_images: list[dict] = field(default_factory=list)  # internal source document images for audit PDF
+    original_doc_bytes: bytes | None = None  # in-memory original document for visual risk mapping (confidential internal report only)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("source_images", None)  # Source images are internal to confidential report only
+        d.pop("original_doc_bytes", None)  # Raw document bytes are internal to confidential report only
+        return d
 
 
 # ---------------------------------------------------------------------------

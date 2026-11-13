@@ -16,6 +16,7 @@ from .leak_guard import check_outbound
 from .mask import mask
 from .prompt import DEFAULT_TASK, build_prompt
 from .reinsert import reinsert
+from .validate import check_ids
 
 
 def process(
@@ -24,18 +25,57 @@ def process(
     task: str = DEFAULT_TASK,
     audit: bool = False,
     audit_db: str | None = None,
+    detector=None,
+    validate_ids: bool = True,
+    source_images: list[dict] | None = None,
+    page_spans: list[dict] | None = None,
+    original_doc_bytes: bytes | None = None,
 ) -> ProcessResult:
+    """`detector` replaces detect() for tests and failure drills only.
+
+    validate_ids: check every Indian ID (format + check digit). If any is
+    invalid, nothing is sent and the result asks the user to re-enter it.
+    """
     backend = backend or MockBackend()
     request_id = uuid.uuid4().hex[:12]
 
     t0 = time.perf_counter()
-    entities = detect(text)
+    entities = (detector or detect)(text)
+    invalid: list[dict] = []
+    if validate_ids:
+        entities, invalid = check_ids(text, entities)
+    if page_spans:
+        from .document import assign_entity_pages
+        entities = assign_entity_pages(entities, page_spans)
     masked = mask(text, entities)
     prompt = build_prompt(masked.masked_text, task)
     leak = check_outbound(prompt, masked.mapping)
     pre_ms = (time.perf_counter() - t0) * 1000
 
-    if not leak.passed:
+    source_imgs = source_images or []
+
+    if invalid:
+        # Ask the user to correct the IDs; never forward a request built on bad input.
+        result = ProcessResult(
+            request_id=request_id,
+            original_text=text,
+            sanitized_text=masked.masked_text,
+            outbound_payload="",
+            llm_output="",
+            final_text="",
+            entities=masked.entities,
+            reinsertion=ReinsertResult(text=""),
+            leak_check=leak,
+            backend=backend.name,
+            model=getattr(backend, "model", backend.name),
+            gateway_ms=pre_ms,
+            llm_ms=0.0,
+            needs_correction=True,
+            invalid_ids=invalid,
+            source_images=source_imgs,
+            original_doc_bytes=original_doc_bytes,
+        )
+    elif not leak.passed:
         # Never forward a payload that still holds a raw value.
         result = ProcessResult(
             request_id=request_id,
@@ -52,9 +92,19 @@ def process(
             gateway_ms=pre_ms,
             llm_ms=0.0,
             blocked=True,
+            source_images=source_imgs,
+            original_doc_bytes=original_doc_bytes,
         )
     else:
-        resp = backend.generate(prompt)
+        try:
+            resp = backend.generate(prompt)
+        except Exception as e:
+            if audit:  # record the failure (payload already passed the leak guard)
+                from .audit import log_error
+
+                log_error(request_id, backend.name, getattr(backend, "model", backend.name),
+                          masked.entities, prompt, e, pre_ms, audit_db)
+            raise
         t1 = time.perf_counter()
         restored = reinsert(resp.text, masked.mapping)
         post_ms = (time.perf_counter() - t1) * 1000
@@ -72,10 +122,33 @@ def process(
             model=resp.model,
             gateway_ms=pre_ms + post_ms,
             llm_ms=resp.latency_ms,
+            source_images=source_imgs,
+            original_doc_bytes=original_doc_bytes,
         )
 
     if audit:
         from .audit import log_request
 
         log_request(result, audit_db)
+
+    # Final PDF Report Generation - generated ONLY after the entire workflow completes
+    from .reports import generate_and_store_reports, is_workflow_successful
+    from .risk import assess_document_risk
+
+    if is_workflow_successful(result):
+        generate_and_store_reports(result, source_images=source_imgs, original_doc_bytes=original_doc_bytes)
+        risk_summary = assess_document_risk(result)
+        result.reports = {
+            "internal_url": f"/reports/internal/{result.request_id}",
+            "risk_score": risk_summary.overall_risk_score,
+            "risk_level": risk_summary.overall_risk_level,
+            "available": True,
+        }
+    else:
+        generate_and_store_reports(result, source_images=source_imgs, original_doc_bytes=original_doc_bytes)
+        result.reports = {
+            "available": False,
+            "reason": "Request blocked or validation failed",
+        }
+
     return result

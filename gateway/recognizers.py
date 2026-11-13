@@ -40,20 +40,30 @@ SCORE_THRESHOLD = 0.4
 
 # Context words, English + common Hinglish spellings. Lowercase.
 CONTEXT = {
-    "AADHAAR": ["aadhaar", "aadhar", "adhaar", "adhar", "uid", "uidai"],
-    "PAN": ["pan", "permanent account number"],
-    "GSTIN": ["gstin", "gst", "goods and services tax", "gst number", "gst registration"],
-    "VOTER_ID": ["voter", "epic", "election", "elector", "elector photo identity card", "matdata"],
-    "PASSPORT": ["passport", "indian passport", "passport number"],
-    "PHONE": ["phone", "mobile", "mob", "contact", "call", "whatsapp", "ph", "tel", "number"],
+    "AADHAAR": [
+        "aadhaar", "aadhar", "adhaar", "adhar", "uid", "uidai",
+        "unique", "identification", "authority", "enrolment", "enrollment", "vid", "virtual",
+    ],
+    "PAN": [
+        "pan", "permanent", "account", "number", "card", "tax", "income",
+        "incometax", "itd", "nsdl", "uti", "utitsl",
+    ],
+    "GSTIN": ["gstin", "gst", "goods", "services", "tax", "registration"],
+    "VOTER_ID": ["voter", "epic", "election", "elector", "identity", "card", "matdata", "eci", "pehchan", "pechan"],
+    "PASSPORT": ["passport", "ovd", "travel", "republic", "mea", "nationality", "visa", "consular"],
+    "PHONE": [
+        "phone", "mobile", "mob", "contact", "call", "whatsapp", "ph",
+        "tel", "telephone", "cell", "sms", "helpline", "number",
+    ],
     "EMAIL": ["email", "e-mail", "mail"],
 }
 
 # Presidio's lowest-confidence PAN pattern matches almost any 10-character
 # word that has 4 digits in it, so keep only the two real PAN shapes.
 PAN_PATTERNS = [
-    Pattern("PAN (High)", r"\b([A-Za-z]{3}[AaBbCcFfGgHhJjLlPpTt][A-Za-z][0-9]{4}[A-Za-z])\b", 0.5),
-    Pattern("PAN (Medium)", r"\b([A-Za-z]{5}[0-9]{4}[A-Za-z])\b", 0.1),
+    Pattern("PAN (High)", r"\b([A-Za-z]{3}[AaBbCcEeFfGgHhJjLlPpTt][A-Za-z][0-9]{4}[A-Za-z])\b", 0.5),
+    Pattern("PAN (Medium)", r"\b([A-Za-z]{5}[0-9]{4}[A-Za-z])\b", 0.15),
+    Pattern("PAN (Spaced/Hyphenated)", r"\b([A-Za-z]{5}[\s\-][0-9]{4}[\s\-][A-Za-z])\b", 0.1),
 ]
 
 
@@ -63,7 +73,7 @@ PAN_PATTERNS = [
 AADHAAR_CONTEXT_ONLY = PatternRecognizer(
     supported_entity="IN_AADHAAR",
     name="AadhaarContextRecognizer",
-    patterns=[Pattern("AADHAAR (context only)", r"\b[2-9][0-9]{3}[ -]?[0-9]{4}[ -]?[0-9]{4}\b", 0.05)],
+    patterns=[Pattern("AADHAAR (context only)", r"\b[2-9][0-9]{3}[ -.:]?[0-9]{4}[ -.:]?[0-9]{4}\b", 0.05)],
     context=CONTEXT["AADHAAR"],
 )
 
@@ -94,7 +104,7 @@ def get_analyzer() -> AnalyzerEngine:
         supported_languages=["en"],
         context_aware_enhancer=LemmaContextAwareEnhancer(
             context_similarity_factor=0.35, min_score_with_context_similarity=0.4,
-            context_prefix_count=6, context_suffix_count=2,
+            context_prefix_count=15, context_suffix_count=5,
         ),
     )
 

@@ -1,6 +1,25 @@
+# Python & Virtual Environments
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
 *.db
 .env
+.env.*
+
+# Frontend & Node
+node_modules/
+frontend/node_modules/
+dist/
+frontend/dist/
+dist-ssr/
+*.local
+.vite/
+
+# Logs & System
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
