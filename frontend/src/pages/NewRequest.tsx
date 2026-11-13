@@ -11,7 +11,9 @@ import {
   File, 
   Trash2,
   Lock,
-  Layers
+  Layers,
+  ShieldAlert,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   processText, 
@@ -282,97 +284,219 @@ export const NewRequest: React.FC = () => {
       {/* ========================================================
           EXECUTION RESULTS DISPLAY (When Process Completes)
       ======================================================== */}
-      {result && (
-        <div className="space-y-6 pt-6 border-t border-slate-800 animate-fade-in">
-          
-          {/* Header Banner */}
-          <div className="p-5 rounded-2xl bg-[#090e1a] border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white">
-                    Request Completed: {result.request_id}
-                  </span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                    {result.status.toUpperCase()}
-                  </span>
+      {result && (() => {
+        const isBlocked = result.status === 'blocked' || Boolean(result.blocked);
+        const isRejected = result.status === 'rejected' || Boolean(result.needs_correction);
+        const isFlagged = result.status === 'flagged';
+
+        return (
+          <div className="space-y-6 pt-6 border-t border-slate-800 animate-fade-in">
+            
+            {/* Header Banner */}
+            <div className={`p-5 rounded-2xl bg-[#090e1a] border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+              isBlocked 
+                ? 'border-rose-900/60 shadow-lg shadow-rose-950/20' 
+                : isRejected 
+                ? 'border-orange-900/60 shadow-lg shadow-orange-950/20' 
+                : 'border-slate-800'
+            }`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
+                  isBlocked
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                    : isRejected
+                    ? 'bg-orange-500/10 border-orange-500/30 text-orange-400'
+                    : isFlagged
+                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                }`}>
+                  {isBlocked ? (
+                    <ShieldAlert className="h-5 w-5" />
+                  ) : isRejected ? (
+                    <AlertTriangle className="h-5 w-5" />
+                  ) : (
+                    <CheckCircle2 className="h-5 w-5" />
+                  )}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Perimeter Latency: {result.gateway_ms || 0}ms · LLM Latency: {result.llm_ms || 0}ms · Zero Raw PII Egress
-                </p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white">
+                      {isBlocked
+                        ? `Perimeter Interception: ${result.request_id}`
+                        : isRejected
+                        ? `Validation Rejected: ${result.request_id}`
+                        : `Request Completed: ${result.request_id}`}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
+                      isBlocked
+                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
+                        : isRejected
+                        ? 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+                        : isFlagged
+                        ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                    }`}>
+                      {result.status.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Perimeter Latency: {result.gateway_ms || 0}ms · LLM Latency: {result.llm_ms || 0}ms · Zero Raw PII Egress
+                  </p>
+                </div>
               </div>
+
+              {/* Download Internal Risk Assessment PDF */}
+              <a
+                href={getInternalReportDownloadUrl(result.request_id)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs shadow-md transition-all flex-shrink-0"
+              >
+                <FileDown className="h-4 w-4 text-slate-950" />
+                <span>Download Internal Risk Assessment PDF</span>
+              </a>
             </div>
 
-            {/* Download Internal Risk Assessment PDF */}
-            <a
-              href={getInternalReportDownloadUrl(result.request_id)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs shadow-md transition-all flex-shrink-0"
-            >
-              <FileDown className="h-4 w-4 text-slate-950" />
-              <span>Download Internal Risk Assessment PDF</span>
-            </a>
-          </div>
-
-          {/* 3 Result Comparison Panels */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            
-            {/* Panel 1: Detected Entities */}
-            <div className="rounded-2xl bg-[#080d1a] border border-slate-800 flex flex-col shadow-xl overflow-hidden h-[420px]">
-              <div className="px-5 py-3.5 bg-[#0c1222] border-b border-slate-800 flex items-center gap-2 font-mono text-xs font-bold text-rose-400 uppercase">
-                <Lock className="h-4 w-4" />
-                <span>1. Local PII Detected</span>
+            {/* Interception / Security Details Banner */}
+            {isBlocked && (
+              <div className="p-4 rounded-xl bg-rose-950/30 border border-rose-800/60 text-rose-300 text-xs flex items-start gap-3">
+                <ShieldAlert className="h-5 w-5 text-rose-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-rose-200">
+                    Fail-Closed Perimeter Interception: Outbound AI Call Halted
+                  </div>
+                  <div className="text-slate-300 leading-relaxed text-[11px]">
+                    The outbound leak guard detected residual sensitive entity type(s):{' '}
+                    <span className="font-mono text-rose-400 font-bold">
+                      {result.leak_check?.leaked_types?.length ? result.leak_check.leaked_types.join(', ') : 'Sensitive PII'}
+                    </span>
+                    . In accordance with zero-trust perimeter security, cloud transmission was immediately halted to prevent confidential data from leaving local RAM (0ms LLM round-trip latency).
+                  </div>
+                </div>
               </div>
-              <div className="p-5 font-mono text-xs text-slate-300 overflow-y-auto space-y-3 flex-1 select-text">
-                <p className="text-[11px] text-slate-400">
-                  Detected {(result.entities_detected || result.entities || []).length} sensitive personal entities in local RAM:
-                </p>
-                <div className="space-y-1.5">
-                  {(result.entities_detected || result.entities || []).map((ent, idx) => (
-                    <div key={idx} className="p-2 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
-                      <span className="text-white font-bold">{ent.text}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">
-                        {ent.type}
-                      </span>
+            )}
+
+            {isRejected && (
+              <div className="p-4 rounded-xl bg-orange-950/30 border border-orange-800/60 text-orange-300 text-xs flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-orange-400 flex-shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <div className="font-bold text-orange-200">
+                    Indian Credential Checksum Failure
+                  </div>
+                  <div className="text-slate-300 leading-relaxed text-[11px]">
+                    One or more official Indian identity numbers failed Verhoeff checksum or regex validation. Requests with invalid identifiers are rejected before AI processing.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 3 Result Comparison Panels */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Panel 1: Detected Entities */}
+              <div className="rounded-2xl bg-[#080d1a] border border-slate-800 flex flex-col shadow-xl overflow-hidden h-[420px]">
+                <div className="px-5 py-3.5 bg-[#0c1222] border-b border-slate-800 flex items-center gap-2 font-mono text-xs font-bold text-rose-400 uppercase">
+                  <Lock className="h-4 w-4" />
+                  <span>1. Local PII Detected</span>
+                </div>
+                <div className="p-5 font-mono text-xs text-slate-300 overflow-y-auto space-y-3 flex-1 select-text">
+                  <p className="text-[11px] text-slate-400">
+                    Detected {(result.entities_detected || result.entities || []).length} sensitive personal entities in local RAM:
+                  </p>
+                  <div className="space-y-1.5">
+                    {(result.entities_detected || result.entities || []).map((ent, idx) => (
+                      <div key={idx} className="p-2 rounded bg-slate-950 border border-slate-800 flex items-center justify-between">
+                        <span className="text-white font-bold">{ent.text}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800">
+                          {ent.type}
+                        </span>
+                      </div>
+                    ))}
+                    {(result.entities_detected || result.entities || []).length === 0 && (
+                      <div className="text-slate-500 italic">No sensitive personal entities found in text.</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Panel 2: Sanitized Outbound Payload */}
+              <div className={`rounded-2xl bg-[#080d1a] border flex flex-col shadow-xl overflow-hidden h-[420px] ${
+                isBlocked ? 'border-rose-500/40 ring-1 ring-rose-500/30' : 'border-orange-500/40 ring-1 ring-orange-500/30'
+              }`}>
+                <div className="px-5 py-3.5 bg-[#0c1222] border-b border-slate-800 flex items-center gap-2 font-mono text-xs font-bold uppercase">
+                  <Layers className="h-4 w-4 text-orange-400" />
+                  <span className={isBlocked ? 'text-rose-400' : 'text-orange-400'}>
+                    2. Outbound AI Payload (Zero PII)
+                  </span>
+                </div>
+                <div className="p-5 font-mono text-xs text-slate-300 overflow-y-auto space-y-3 flex-1 select-text bg-slate-950/60 whitespace-pre-wrap">
+                  {isBlocked ? (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-900/60 text-rose-300 text-[11px]">
+                        <div className="font-bold uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                          <ShieldAlert className="h-3.5 w-3.5 text-rose-400" />
+                          <span>Transmission Halted by Leak Guard</span>
+                        </div>
+                        Outbound payload withheld from cloud AI. Residual entity detected in text:{' '}
+                        <span className="font-bold text-rose-200">
+                          {result.leak_check?.leaked_types?.join(', ') || 'Sensitive PII'}
+                        </span>
+                      </div>
+                      {result.sanitized_text && (
+                        <div className="space-y-1">
+                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                            Local Sanitized Draft (Never Transmitted):
+                          </div>
+                          <div className="text-slate-300">{result.sanitized_text}</div>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  {(result.entities_detected || result.entities || []).length === 0 && (
-                    <div className="text-slate-500 italic">No sensitive personal entities found in text.</div>
+                  ) : (
+                    result.outbound_payload || result.sanitized_text || result.sanitized_prompt || 'No payload generated'
                   )}
                 </div>
               </div>
-            </div>
 
-            {/* Panel 2: Sanitized Outbound Payload */}
-            <div className="rounded-2xl bg-[#080d1a] border border-orange-500/40 flex flex-col shadow-xl overflow-hidden h-[420px] ring-1 ring-orange-500/30">
-              <div className="px-5 py-3.5 bg-[#0c1222] border-b border-slate-800 flex items-center gap-2 font-mono text-xs font-bold text-orange-400 uppercase">
-                <Layers className="h-4 w-4" />
-                <span>2. Outbound AI Payload (Zero PII)</span>
+              {/* Panel 3: Final Answer for User */}
+              <div className={`rounded-2xl bg-[#080d1a] border flex flex-col shadow-xl overflow-hidden h-[420px] ${
+                isBlocked ? 'border-slate-800' : 'border-emerald-500/40 ring-1 ring-emerald-500/20'
+              }`}>
+                <div className="px-5 py-3.5 bg-[#0c1222] border-b border-slate-800 flex items-center gap-2 font-mono text-xs font-bold text-emerald-400 uppercase">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>3. Final Restored Response</span>
+                </div>
+                <div className="p-5 font-mono text-xs text-slate-300 overflow-y-auto space-y-3 flex-1 select-text bg-slate-950/60 whitespace-pre-wrap">
+                  {isBlocked ? (
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-lg bg-slate-900/90 border border-slate-800 text-slate-300 text-[11px]">
+                        <div className="font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                          <Lock className="h-3.5 w-3.5 text-orange-400" />
+                          <span>Cloud AI Call Suppressed</span>
+                        </div>
+                        Because the zero-trust leak guard intercepted the outbound payload, external AI invocation was skipped (LLM Latency: 0ms). No AI response exists to reinsert.
+                      </div>
+                      <div className="text-slate-400 text-xs leading-relaxed">
+                        Click <span className="text-white font-bold">Download Internal Risk Assessment PDF</span> above for the full confidential perimeter audit, entity coordinates, and risk score.
+                      </div>
+                    </div>
+                  ) : isRejected ? (
+                    <div className="p-3 rounded-lg bg-orange-950/40 border border-orange-900/60 text-orange-300 text-[11px]">
+                      <div className="font-bold uppercase tracking-wider mb-1">
+                        Credential Validation Failed
+                      </div>
+                      Please verify invalid identifiers and submit a valid document.
+                    </div>
+                  ) : (
+                    result.final_text || result.final_response || result.llm_output || result.llm_response || 'No response returned'
+                  )}
+                </div>
               </div>
-              <div className="p-5 font-mono text-xs text-slate-300 overflow-y-auto space-y-3 flex-1 select-text bg-slate-950/60 whitespace-pre-wrap">
-                {result.sanitized_prompt || result.outbound_payload || 'No payload generated'}
-              </div>
-            </div>
 
-            {/* Panel 3: Final Answer for User */}
-            <div className="rounded-2xl bg-[#080d1a] border border-emerald-500/40 flex flex-col shadow-xl overflow-hidden h-[420px]">
-              <div className="px-5 py-3.5 bg-[#0c1222] border-b border-slate-800 flex items-center gap-2 font-mono text-xs font-bold text-emerald-400 uppercase">
-                <ShieldCheck className="h-4 w-4" />
-                <span>3. Final Restored Response</span>
-              </div>
-              <div className="p-5 font-mono text-xs text-slate-300 overflow-y-auto space-y-3 flex-1 select-text bg-slate-950/60 whitespace-pre-wrap">
-                {result.final_response || result.llm_response || 'No response returned'}
-              </div>
             </div>
 
           </div>
-
-        </div>
-      )}
+        );
+      })()}
 
     </div>
   );

@@ -66,9 +66,13 @@ export interface ProcessTextRequest {
 
 export interface ProcessResponse {
   request_id: string;
-  status: string;
-  sanitized_prompt?: string;
+  status: 'ok' | 'flagged' | 'rejected' | 'blocked' | 'error' | string;
+  original_text?: string;
+  sanitized_text?: string;
   outbound_payload?: string;
+  llm_output?: string;
+  final_text?: string;
+  sanitized_prompt?: string;
   llm_response?: string;
   final_response?: string;
   entities_detected?: DetectedEntity[];
@@ -77,6 +81,23 @@ export interface ProcessResponse {
   gateway_ms?: number;
   llm_ms?: number;
   blocked?: boolean;
+  needs_correction?: boolean;
+  invalid_ids?: Array<{
+    type: string;
+    value: string;
+    reason: string;
+    message?: string;
+  }>;
+  leak_check?: {
+    passed: boolean;
+    leaked_types: string[];
+  };
+  reports?: {
+    internal_url?: string;
+    risk_score?: number;
+    risk_level?: string;
+    available?: boolean;
+  };
   document?: {
     filename: string;
     format: string;
@@ -87,6 +108,26 @@ export interface ProcessResponse {
     restored: string[];
     dropped: string[];
     unknown: string[];
+  };
+}
+
+function normalizeProcessResponse(data: any): ProcessResponse {
+  const sanitized = data.sanitized_prompt || data.outbound_payload || data.sanitized_text || '';
+  const finalResp = data.final_response || data.final_text || data.llm_output || '';
+  const llmResp = data.llm_response || data.llm_output || '';
+  const entities = data.entities_detected || data.entities || [];
+
+  return {
+    ...data,
+    sanitized_prompt: sanitized,
+    sanitized_text: data.sanitized_text || sanitized,
+    outbound_payload: data.outbound_payload || '',
+    final_response: finalResp,
+    final_text: data.final_text || finalResp,
+    llm_response: llmResp,
+    llm_output: data.llm_output || llmResp,
+    entities_detected: entities,
+    entities: entities,
   };
 }
 
@@ -140,7 +181,8 @@ export async function processText(req: ProcessTextRequest): Promise<ProcessRespo
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `Processing failed with status ${res.status}`);
   }
-  return res.json();
+  const data = await res.json();
+  return normalizeProcessResponse(data);
 }
 
 export async function extractDocument(file: File): Promise<ExtractDocumentResponse> {
@@ -182,7 +224,8 @@ export async function processDocument(
     const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
     throw new Error(err.detail || `Document processing failed with status ${res.status}`);
   }
-  return res.json();
+  const data = await res.json();
+  return normalizeProcessResponse(data);
 }
 
 export function getInternalReportDownloadUrl(requestId: string, role = 'authorized'): string {
